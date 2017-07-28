@@ -3,7 +3,7 @@ Internal data-structures/algorithms to construct the directory tree structure
 published by the registrar.
 """
 
-import traceback
+import logging
 
 from collections import defaultdict
 
@@ -85,10 +85,6 @@ def client_registrations_to_directory_tree(client_registrations):
     tree = Tree()
     
     for client_id, client_registration in client_registrations.items():
-        # Skip unregistering clients
-        if client_registration is qth.Empty:
-            continue
-        
         try:
             # Add topics registered by the client
             for topic, description in client_registration["topics"].items():
@@ -101,7 +97,9 @@ def client_registrations_to_directory_tree(client_registrations):
                            {"behaviour": qth.PROPERTY_ONE_TO_MANY,
                             "description": "Client Qth registration details.",
                             "client_id": client_id})
-        except:
-            traceback.print_exc()
+        except e:
+            logging.error("Malformed registration for client '%s': %s",
+                          client_id, registration)
+            logging.exception(e)
     
     return dict(tree.iter_listings())

@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 import asyncio
+import logging
 
 import qth
 
@@ -46,11 +47,14 @@ class QthRegistrar(object):
         # A lock which is held while the tree is reconciled.
         self._reconciliation_lock = asyncio.Lock()
         
+        logging.info("Qth registrar starting...")
         self._loop.create_task(self._startup())
     
     async def close(self):
+        logging.info("Qth registrar shutting down...")
         self._enable_listings_updates = False
         await self._client.close()
+        logging.info("Qth registrar shut down.")
     
     async def _startup(self):
         # Register just the root 'ls' endpoint as a hint for browsers. We can't
@@ -65,14 +69,17 @@ class QthRegistrar(object):
         await self._client.ensure_connected()
         
         # Fetch the current published tree and client registrations
+        logging.info("Waiting for all client registrations to arrive.")
         await asyncio.wait([
             self._client.subscribe("meta/clients/+", self._on_client_changed),
             self._read_back_tree(),
         ], loop=self._loop)
         
         # Reconcile any differences
+        logging.info("Publishing initial tree.")
         self._enable_listings_updates = True
         await self._reconcile()
+        logging.info("Server started!")
     
     async def _read_back_tree(self):
         """Internal use only. Read the directory tree back from the MQTT server
@@ -96,9 +103,14 @@ class QthRegistrar(object):
         """
         # Update the client record
         client_id = topic.split("/")[-1]
-        if payload is not None:
+        if payload is not qth.Empty:
+            if client_id not in self._client_registrations:
+                logging.info("Client '%s' connected.", client_id)
+            else:
+                logging.info("Client '%s' changed.", client_id)
             self._client_registrations[client_id] = payload
         else:
+            logging.info("Client '%s' disconnected.", client_id)
             self._client_registrations.pop(client_id, None)
         
         # Propagate the changes to the listing tree
@@ -110,6 +122,7 @@ class QthRegistrar(object):
         client registrations.
         """
         with await self._reconciliation_lock:
+            logging.info("Reconciling tree...")
             # Compute the complete desired directory tree
             new_tree = client_registrations_to_directory_tree(
                 self._client_registrations)
@@ -123,23 +136,26 @@ class QthRegistrar(object):
             # Generate publications.
             message_coros = []
             for topic in to_change:
-                new_value = new_tree.get(topic)
+                new_value = new_tree.get(topic, qth.Empty)
                 retain = new_value is not None
                 message_coros.append(self._client.publish(topic, new_value,
                                      retain=retain))
             
             # Wait for publications to take effect
             if message_coros:
+                logging.info("Updating tree for paths: %s",
+                             ", ".join(map(repr, to_change)))
                 try:
                     done, pending = await asyncio.wait(message_coros, loop=self._loop)
                     assert len(pending) == 0
                     self._cur_tree = new_tree
-                except:
+                except e:
                     # If publication fails we'll be left in an unknown state;
                     # republish everything from scratch.
+                    logging.error("Tree update failed, will recreate tree from scratch...")
                     self._cur_tree = {}
                     if self._enable_listings_updates:
                         self._loop.create_task(self._reconcile())
-                    
-                    raise
-
+                    logging.exception(e)
+            else:
+                logging.info("No changes to tree required!")

@@ -4,6 +4,7 @@
 
 import argparse
 import asyncio
+import logging
 
 from qth_registrar import QthRegistrar, __version__
 
@@ -37,7 +38,12 @@ def main(args=None):
                         help="The number of seconds to wait for all existing "
                              "listings and client registrations to be "
                              "received after startup.")
+    parser.add_argument("--quiet", "-q", action="store_true",
+                        help="hide non-error output")
     args = parser.parse_args(args)
+    
+    if not args.quiet:
+        logging.basicConfig(level=logging.INFO)
 
     loop = asyncio.get_event_loop()
     reg = QthRegistrar(host=args.host, port=args.port,
