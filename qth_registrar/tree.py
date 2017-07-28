@@ -97,9 +97,9 @@ def client_registrations_to_directory_tree(client_registrations):
                            {"behaviour": qth.PROPERTY_ONE_TO_MANY,
                             "description": "Client Qth registration details.",
                             "client_id": client_id})
-        except e:
+        except Exception as e:
             logging.error("Malformed registration for client '%s': %s",
-                          client_id, registration)
+                          client_id, client_registration)
             logging.exception(e)
     
     return dict(tree.iter_listings())

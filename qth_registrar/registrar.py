@@ -149,7 +149,7 @@ class QthRegistrar(object):
                     done, pending = await asyncio.wait(message_coros, loop=self._loop)
                     assert len(pending) == 0
                     self._cur_tree = new_tree
-                except e:
+                except Exception as e:
                     # If publication fails we'll be left in an unknown state;
                     # republish everything from scratch.
                     logging.error("Tree update failed, will recreate tree from scratch...")
