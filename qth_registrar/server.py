@@ -41,7 +41,7 @@ def main(args=None):
     parser.add_argument("--quiet", "-q", action="store_true",
                         help="hide non-error output")
     args = parser.parse_args(args)
-    
+
     if not args.quiet:
         logging.basicConfig(level=logging.INFO)
 

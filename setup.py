@@ -31,7 +31,7 @@ setup(
     keywords="mqtt asyncio home-automation messaging",
 
     # Requirements
-    install_requires=["qth>=0.3.0"],
+    install_requires=["qth>=0.5.0"],
     
     # Scripts
     entry_points={

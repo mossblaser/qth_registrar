@@ -12,13 +12,13 @@ import qth
 
 class Tree(object):
     """A recursive tree structure in a directory tree."""
-    
+
     def __init__(self):
         self.children = defaultdict(list)
-    
+
     def add_topic(self, topic, description):
         """Add a new path to the tree.
-        
+
         Params
         ------
         topic : str
@@ -29,7 +29,7 @@ class Tree(object):
         """
         if "/" in topic:
             dirname, _, sub_topic = topic.partition("/")
-            
+
             tree = None
             for child in self.children[dirname]:
                 if isinstance(child, Tree):
@@ -38,11 +38,11 @@ class Tree(object):
             if tree is None:
                 tree = Tree()
                 self.children[dirname].append(tree)
-            
+
             tree.add_topic(sub_topic, description)
         else:
             self.children[topic].append(description)
-    
+
     def get_listing(self):
         """Get a JSON-serialisable Qth-registry formatted listing of the
         contents of this level of the directory tree, including entries
@@ -56,11 +56,11 @@ class Tree(object):
                     for description in descriptions]
             for topic, descriptions in self.children.items()
         }
-    
+
     def iter_listings(self, topic="meta/ls/"):
         """An iterator over the Qth-style directory listings for the entire
         directory structure.
-        
+
         Params
         ------
         topic : str
@@ -69,7 +69,7 @@ class Tree(object):
         """
         # This directory
         yield (topic, self.get_listing())
-        
+
         # Child directories
         for child_subtopic, children in self.children.items():
             child_topic = "{}{}/".format(topic, child_subtopic)
@@ -83,7 +83,7 @@ def client_registrations_to_directory_tree(client_registrations):
     dict mapping from directory listing path to directory listing entry.
     """
     tree = Tree()
-    
+
     for client_id, client_registration in client_registrations.items():
         try:
             # Add topics registered by the client
@@ -91,7 +91,7 @@ def client_registrations_to_directory_tree(client_registrations):
                 description = description.copy()
                 description["client_id"] = client_id
                 tree.add_topic(topic, description)
-            
+
             # Add the client registration property itself
             tree.add_topic("meta/clients/{}".format(client_id),
                            {"behaviour": qth.PROPERTY_ONE_TO_MANY,
@@ -101,5 +101,5 @@ def client_registrations_to_directory_tree(client_registrations):
             logging.error("Malformed registration for client '%s': %s",
                           client_id, client_registration)
             logging.exception(e)
-    
+
     return dict(tree.iter_listings())
