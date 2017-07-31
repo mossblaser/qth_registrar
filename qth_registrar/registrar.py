@@ -117,18 +117,15 @@ class QthRegistrar(object):
             child_registration = self._client_registrations.pop(client_id, {})
             for topic, registration in child_registration["topics"].items():
                 if registration.get("delete_on_unregister", False):
-                    print(topic, "deleted")
                     self._loop.create_task(self._client.delete_property(topic))
                 elif "on_unregister" in registration:
                     if registration["behaviour"] in (qth.EVENT_ONE_TO_MANY,
                                                      qth.EVENT_MANY_TO_ONE):
-                        print(topic, "send")
                         self._loop.create_task(self._client.send_event(
                             topic, registration["on_unregister"]))
                     elif registration["behaviour"] in (
                             qth.PROPERTY_ONE_TO_MANY,
                             qth.PROPERTY_MANY_TO_ONE):
-                        print(topic, "set")
                         self._loop.create_task(self._client.set_property(
                             topic, registration["on_unregister"]))
 
