@@ -11,7 +11,7 @@ from qth_registrar.tree import client_registrations_to_directory_tree
 class QthRegistrar(object):
     """A registration server for Qth."""
 
-    def __init__(self, load_time=3.0, loop=None, host="localhost", port=1883,
+    def __init__(self, load_time=3.0, loop=None, host=None, port=None,
                  keepalive=10):
         """Constructor
 
