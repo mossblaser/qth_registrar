@@ -114,8 +114,9 @@ class QthRegistrar(object):
         else:
             # Child disconnected, perform requested cleanup actions
             logging.info("Client '%s' disconnected.", client_id)
-            child_registration = self._client_registrations.pop(client_id, {})
-            for topic, registration in child_registration["topics"].items():
+            child_registration = \
+                self._client_registrations.pop(client_id, {}).get("topics", {})
+            for topic, registration in child_registration.items():
                 if registration.get("delete_on_unregister", False):
                     self._loop.create_task(self._client.delete_property(topic))
                 elif "on_unregister" in registration:

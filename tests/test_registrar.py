@@ -139,6 +139,20 @@ async def test_registration(reg, client, event_loop):
 
 
 @pytest.mark.asyncio
+async def test_multiple_unregister(reg, client, event_loop):
+    # Clients may attempt to gracefully disconnect (unregistering themselves)
+    # but forget to close the Qth/MQTT connection correctly leading to their
+    # will sending a second unregistration command. Make sure the server
+    # handles this correctly.
+    
+    await client.register("test/foo", qth.EVENT_ONE_TO_MANY, "A test event...")
+    
+    # Naughty: delete the registratation... several times.
+    await client.delete_property("meta/clients/test-client")
+    await client.delete_property("meta/clients/test-client")
+    await client.close()
+
+@pytest.mark.asyncio
 async def test_unregister_actions(reg, client, hostname, port, event_loop):
     dut = qth.Client("device-under-test",
                      host=hostname, port=port,
