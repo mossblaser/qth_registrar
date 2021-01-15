@@ -138,7 +138,7 @@ class QthRegistrar(object):
         """Internal. Make the listed tree consistent with the current set of
         client registrations.
         """
-        with await self._reconciliation_lock:
+        async with self._reconciliation_lock:
             logging.info("Reconciling tree...")
             # Compute the complete desired directory tree
             new_tree = client_registrations_to_directory_tree(
