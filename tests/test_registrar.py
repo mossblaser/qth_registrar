@@ -1,5 +1,8 @@
 import pytest
+import pytest_asyncio
 from mock import Mock
+
+import subprocess
 
 import asyncio
 
@@ -18,31 +21,24 @@ def hostname():
     return "localhost"
 
 
-@pytest.fixture(scope="module")
-def event_loop():
-    return asyncio.get_event_loop()
-
-
-@pytest.yield_fixture(scope="module")
-def server(event_loop, port):
-    mosquitto = event_loop.run_until_complete(asyncio.create_subprocess_exec(
-        "mosquitto", "-p", str(port),
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-        loop=event_loop))
+@pytest_asyncio.fixture(scope="module")
+def server(port):
+    mosquitto = subprocess.Popen(
+        ["mosquitto", "-p", str(port)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
     try:
         yield
     finally:
         mosquitto.terminate()
-        event_loop.run_until_complete(mosquitto.wait())
 
 
-@pytest.fixture
-async def client(server, hostname, port, event_loop):
+@pytest_asyncio.fixture
+async def client(server, hostname, port):
     c = qth.Client("test-client", make_client_id_unique=False,
-                   host=hostname, port=port,
-                   loop=event_loop)
+                   host=hostname, port=port)
     try:
         yield c
     finally:
@@ -50,10 +46,9 @@ async def client(server, hostname, port, event_loop):
 
 
 @pytest.fixture
-async def reg(server, hostname, port, event_loop):
+async def reg(server, hostname, port):
     r = qth_registrar.QthRegistrar(load_time=0.1,
-                                   host=hostname, port=port,
-                                   loop=event_loop)
+                                   host=hostname, port=port)
     try:
         yield r
     finally:
@@ -61,12 +56,12 @@ async def reg(server, hostname, port, event_loop):
 
 
 @pytest.mark.asyncio
-async def test_registration(reg, client, event_loop):
+async def test_registration(reg, client):
     # Wait for (empty) root directory listing to be posted
-    on_ls_event = asyncio.Event(loop=event_loop)
+    on_ls_event = asyncio.Event()
     on_ls = Mock(side_effect=lambda *_: on_ls_event.set())
     await client.watch_property("meta/ls/", on_ls)
-    await asyncio.wait_for(on_ls_event.wait(), 5.0, loop=event_loop)
+    await asyncio.wait_for(on_ls_event.wait(), 5.0)
     on_ls.assert_called_once_with("meta/ls/", {
         "meta": [{"behaviour": "DIRECTORY",
                   "description": "A subdirectory.",
@@ -77,7 +72,7 @@ async def test_registration(reg, client, event_loop):
     on_ls_event.clear()
     on_ls.reset_mock()
     await client.register("test", qth.EVENT_ONE_TO_MANY, "A test event.")
-    await asyncio.wait_for(on_ls_event.wait(), 5.0, loop=event_loop)
+    await asyncio.wait_for(on_ls_event.wait(), 5.0)
     on_ls.assert_called_once_with("meta/ls/", {
         "test": [{"behaviour": "EVENT-1:N",
                   "description": "A test event.",
@@ -91,7 +86,7 @@ async def test_registration(reg, client, event_loop):
     on_ls_event.clear()
     on_ls.reset_mock()
     await client.publish_registration()
-    await asyncio.sleep(0.1, loop=event_loop)
+    await asyncio.sleep(0.1)
     assert on_ls.mock_calls == []
 
     # If many registrations are made in quick succession not every one should
@@ -102,15 +97,18 @@ async def test_registration(reg, client, event_loop):
     await client.watch_property("meta/ls/many/", on_ls_many)
 
     NUM_REGISTRATIONS = 20
-    coros = []
+    tasks = []
     for i in range(NUM_REGISTRATIONS):
-        coros.append(client.register("many/{}".format(i),
-                                     qth.EVENT_ONE_TO_MANY,
-                                     "An example."))
-    done, pending = await asyncio.wait(coros, loop=event_loop)
+        tasks.append(
+            asyncio.create_task(
+                client.register(
+                    "many/{}".format(i),
+                    qth.EVENT_ONE_TO_MANY,
+                    "An example.")))
+    done, pending = await asyncio.wait(tasks)
     assert len(pending) == 0
 
-    await asyncio.sleep(0.1, loop=event_loop)
+    await asyncio.sleep(0.1)
 
     # Top level should have changed exactly once
     assert len(on_ls.mock_calls) == 1
@@ -139,7 +137,7 @@ async def test_registration(reg, client, event_loop):
 
 
 @pytest.mark.asyncio
-async def test_multiple_unregister(reg, client, event_loop):
+async def test_multiple_unregister(reg, client):
     # Clients may attempt to gracefully disconnect (unregistering themselves)
     # but forget to close the Qth/MQTT connection correctly leading to their
     # will sending a second unregistration command. Make sure the server
@@ -153,10 +151,9 @@ async def test_multiple_unregister(reg, client, event_loop):
     await client.close()
 
 @pytest.mark.asyncio
-async def test_unregister_actions(reg, client, hostname, port, event_loop):
+async def test_unregister_actions(reg, client, hostname, port):
     dut = qth.Client("device-under-test",
-                     host=hostname, port=port,
-                     loop=event_loop)
+                     host=hostname, port=port)
     try:
         await dut.register("unregtest/event-1:N", qth.EVENT_ONE_TO_MANY,
                            "1:N event", on_unregister="QB")
@@ -191,7 +188,7 @@ async def test_unregister_actions(reg, client, hostname, port, event_loop):
         for topic in topics:
             await client.subscribe(topic, on_message)
 
-        await asyncio.sleep(0.1, loop=event_loop)
+        await asyncio.sleep(0.1)
 
         # Make sure initial property values have arrived
         assert messages == {
@@ -203,7 +200,7 @@ async def test_unregister_actions(reg, client, hostname, port, event_loop):
         # Now disconnect the testing client and ensure everything arrives
         messages.clear()
         await dut.close()
-        await asyncio.sleep(0.5, loop=event_loop)
+        await asyncio.sleep(0.5)
         assert messages == {
             "unregtest/event-1:N": "QB",
             "unregtest/event-N:1": "THAN",
@@ -218,7 +215,7 @@ async def test_unregister_actions(reg, client, hostname, port, event_loop):
         messages.clear()
         for topic in topics:
             await client.subscribe(topic, on_message)
-        await asyncio.sleep(0.1, loop=event_loop)
+        await asyncio.sleep(0.1)
         assert messages == {
             "unregtest/property-1:N": "FOO",
             "unregtest/property-N:1": "BAR",

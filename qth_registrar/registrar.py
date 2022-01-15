@@ -11,7 +11,7 @@ from qth_registrar.tree import client_registrations_to_directory_tree
 class QthRegistrar(object):
     """A registration server for Qth."""
 
-    def __init__(self, load_time=3.0, loop=None, host=None, port=None,
+    def __init__(self, load_time=3.0, host=None, port=None,
                  keepalive=10):
         """Constructor
 
@@ -22,10 +22,10 @@ class QthRegistrar(object):
             response to a subscription.
         """
         self._load_time = load_time
-        self._loop = loop or asyncio.get_event_loop()
+        self._loop = asyncio.get_event_loop()
         self._client = qth.Client("qth_registrar",
                                   "Implements the Qth Registration service.",
-                                  loop=loop, host=host, port=port,
+                                  host=host, port=port,
                                   keepalive=keepalive)
 
         # When the server first starts up we allow some time to receive the
@@ -72,9 +72,10 @@ class QthRegistrar(object):
         # Fetch the current published tree and client registrations
         logging.info("Waiting for all client registrations to arrive.")
         await asyncio.wait([
-            self._client.subscribe("meta/clients/+", self._on_client_changed),
-            self._read_back_tree(),
-        ], loop=self._loop)
+            asyncio.create_task(
+                self._client.subscribe("meta/clients/+", self._on_client_changed)),
+            asyncio.create_task(self._read_back_tree()),
+        ])
 
         # Reconcile any differences
         logging.info("Publishing initial tree.")
@@ -94,7 +95,7 @@ class QthRegistrar(object):
         await self._client.subscribe("meta/ls/#", on_dir_listing_received)
 
         # Give the tree time to be received
-        await asyncio.sleep(self._load_time, loop=self._loop)
+        await asyncio.sleep(self._load_time)
 
         await self._client.unsubscribe("meta/ls/#", on_dir_listing_received)
 
@@ -151,20 +152,21 @@ class QthRegistrar(object):
                     to_change.add(topic)
 
             # Generate publications.
-            message_coros = []
+            message_tasks = []
             for topic in to_change:
                 new_value = new_tree.get(topic, qth.Empty)
                 retain = new_value is not None
-                message_coros.append(self._client.publish(topic, new_value,
-                                     retain=retain))
+                message_tasks.append(
+                    asyncio.create_task(
+                        self._client.publish(topic, new_value, retain=retain)))
 
             # Wait for publications to take effect
-            if message_coros:
+            if message_tasks:
                 logging.info("Updating tree for paths: %s",
                              ", ".join(map(repr, to_change)))
                 try:
                     done, pending = await asyncio.wait(
-                        message_coros, loop=self._loop)
+                        message_tasks)
                     assert len(pending) == 0
                     self._cur_tree = new_tree
                 except Exception as e:

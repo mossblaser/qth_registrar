@@ -48,8 +48,7 @@ def main(args=None):
     loop = asyncio.get_event_loop()
     reg = QthRegistrar(host=args.host, port=args.port,
                        keepalive=args.keepalive,
-                       load_time=args.load_time,
-                       loop=loop)
+                       load_time=args.load_time)
     try:
         loop.run_forever()
     except KeyboardInterrupt:
