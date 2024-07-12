@@ -1,5 +1,4 @@
 import pytest
-import pytest_asyncio
 from mock import Mock
 
 import subprocess
@@ -21,7 +20,7 @@ def hostname():
     return "localhost"
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest.fixture(scope="module")
 def server(port):
     mosquitto = subprocess.Popen(
         ["mosquitto", "-p", str(port)],
@@ -35,7 +34,7 @@ def server(port):
         mosquitto.terminate()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 async def client(server, hostname, port):
     c = qth.Client("test-client", make_client_id_unique=False,
                    host=hostname, port=port)
